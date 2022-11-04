@@ -123,4 +123,4 @@ mmtrack/.mim
 *.sh~
 
 # ryanliu
-datasets/
+data/
