@@ -117,7 +117,7 @@ def main():
         image_folder = osp.join(video_folder, video)
         images = os.listdir(image_folder)
         images.sort()
-        for image in tqdm(images):
+        for image in images:
             # read image
             raw_img = mmcv.imread(
                 f'{image_folder}/{image}')
