@@ -42,139 +42,124 @@ import argparse
 import os
 import os.path as osp
 import random
+import pandas as pd
 
 import mmcv
 import numpy as np
 from tqdm import tqdm
+import pdb
 
-USELESS = [3, 4, 5, 6, 9, 10, 11]
-IGNORES = [2, 7, 8, 12, 13]
+# USELESS = [3, 4, 5, 6, 9, 10, 11]
+# IGNORES = [2, 7, 8, 12, 13]
+USE = [1, 2]
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Convert MOT dataset into ReID dataset.')
-    parser.add_argument('-i', '--input', help='path of VisDrone-MOT data')
-    parser.add_argument('-o', '--output', help='path to save ReID dataset')
+        description='Convert VisDrone-MOT label and detections to ReID format.')
+    parser.add_argument('-d', '--dir', help='path of VisDrone-MOT data')
+    parser.add_argument(
+        '--min-per-person',
+        type=int,
+        default=8,
+        help='minimum number of images for each person')
+    parser.add_argument(
+        '--max-per-person',
+        type=int,
+        default=1000,
+        help='maxmum number of images for each person')
     return parser.parse_args()
+
+
+# def parse_annotation(annotation):
+#     annotation = annotation.strip().split(',')
+#     frame_id, instance_id = map(int, annotation[:2])
+#     bbox = list(map(float, annotation[2:6]))
+#     score = int(annotation[6])
+#     category_id = int(annotation[7])
+#     output = dict(
+#         frame_id = frame_id,
+#         instance_id = instance_id,
+#         bbox = bbox,
+#         score = score,
+#         category_id = category_id,
+#     )
+#     return output
 
 
 def main():
     args = parse_args()
-    if not osp.isdir(args.output):
-        os.makedirs(args.output)
-    elif os.listdir(args.output):
-        raise OSError(f'Directory must empty: \'{args.output}\'')
+    ann_folder = osp.join(args.dir, 'annotations')
+    video_folder = osp.join(args.dir, 'sequences')
+    reid_folder = osp.join(args.dir, 'reid')
+    if not osp.exists(reid_folder):
+        os.makedirs(reid_folder)
+    videos = os.listdir(video_folder)
+    columns = [
+        'frame_id',
+        'instance_id',
+        'bbox_left',
+        'bbox_top',
+        'bbox_width',
+        'bbox_height',
+        'score',
+        'object_category',
+        'truncation',
+        'occlusion',]
+    print("corp reid images...")
+    for video in tqdm(videos):
+        # pdb.set_trace()
+        df = pd.read_csv(osp.join(ann_folder, video+'.txt'), names=columns)
+        # with open(osp.join(ann_path, video+'.txt')) as f:
+        #     annotations = f.readlines()
+        # annotations = list(map(parse_annotation, annotations))
+        # annotations.sort(key=lambda x: x.frame_id)
+        image_folder = osp.join(video_folder, video)
+        images = os.listdir(image_folder)
+        images.sort()
+        for image in tqdm(images):
+            # read image
+            raw_img = mmcv.imread(
+                f'{image_folder}/{image}')
+            # found annotations in this image
+            frame_id = int(image.split('.')[0])
+            _df = df[df.frame_id == frame_id]
+            for _, row in _df.iterrows():
+                if row.score == 0 or row.object_category not in USE:
+                    continue
+                xyxy = np.asarray(
+                    [row.bbox_left, row.bbox_top, row.bbox_left + row.bbox_width, row.bbox_top + row.bbox_height])
+                reid_img = mmcv.imcrop(raw_img, xyxy)
+                mmcv.imwrite(reid_img,
+                             f'{reid_folder}/{video}_{row.instance_id:06d}/{row.frame_id:06d}.jpg')
 
-    in_folder = osp.join(args.input, 'train')
-    video_names = os.listdir(in_folder)
-    if 'MOT17' in in_folder:
-        video_names = [
-            video_name for video_name in video_names if 'FRCNN' in video_name
-        ]
-    is_mot15 = True if 'MOT15' in in_folder else False
-    for video_name in tqdm(video_names):
-        # load video infos
-        video_folder = osp.join(in_folder, video_name)
-        infos = mmcv.list_from_file(f'{video_folder}/seqinfo.ini')
-        # video-level infos
-        assert video_name == infos[1].strip().split('=')[1]
-        raw_img_folder = infos[2].strip().split('=')[1]
-        raw_img_names = os.listdir(f'{video_folder}/{raw_img_folder}')
-        raw_img_names = sorted(raw_img_names)
-        num_raw_imgs = int(infos[4].strip().split('=')[1])
-        assert num_raw_imgs == len(raw_img_names)
-
-        reid_train_folder = osp.join(args.output, 'imgs')
-        if not osp.exists(reid_train_folder):
-            os.makedirs(reid_train_folder)
-        gts = mmcv.list_from_file(f'{video_folder}/gt/gt.txt')
-        last_frame_id = -1
-        for gt in gts:
-            gt = gt.strip().split(',')
-            frame_id, ins_id = map(int, gt[:2])
-            ltwh = list(map(float, gt[2:6]))
-            if is_mot15:
-                class_id = 1
-                visibility = 1.
-            else:
-                class_id = int(gt[7])
-                visibility = float(gt[8])
-            if class_id in USELESS:
-                continue
-            elif class_id in IGNORES:
-                continue
-            elif visibility < args.vis_threshold:
-                continue
-            reid_img_folder = osp.join(reid_train_folder,
-                                       f'{video_name}_{ins_id:06d}')
-            if not osp.exists(reid_img_folder):
-                os.makedirs(reid_img_folder)
-            idx = len(os.listdir(reid_img_folder))
-            reid_img_name = f'{idx:06d}.jpg'
-            if frame_id != last_frame_id:
-                raw_img_name = raw_img_names[frame_id - 1]
-                raw_img = mmcv.imread(
-                    f'{video_folder}/{raw_img_folder}/{raw_img_name}')
-                last_frame_id = frame_id
-            xyxy = np.asarray(
-                [ltwh[0], ltwh[1], ltwh[0] + ltwh[2], ltwh[1] + ltwh[3]])
-            reid_img = mmcv.imcrop(raw_img, xyxy)
-            mmcv.imwrite(reid_img, f'{reid_img_folder}/{reid_img_name}')
-
-    reid_meta_folder = osp.join(args.output, 'meta')
+    # generate label infos
+    print("generate reid labels...")
+    reid_meta_folder = osp.join(args.dir, 'reid_meta')
     if not osp.exists(reid_meta_folder):
         os.makedirs(reid_meta_folder)
-    reid_train_list = []
-    reid_val_list = []
-    reid_img_folder_names = sorted(os.listdir(reid_train_folder))
-    num_ids = len(reid_img_folder_names)
-    num_train_ids = int(num_ids * (1 - args.val_split))
+    reid_img_folder_names = sorted(os.listdir(reid_folder))
     train_label, val_label = 0, 0
     random.seed(0)
-    for reid_img_folder_name in reid_img_folder_names[:num_train_ids]:
+    reid_dataset_list = []
+    for reid_img_folder_name in reid_img_folder_names:
         reid_img_names = os.listdir(
-            f'{reid_train_folder}/{reid_img_folder_name}')
+            f'{reid_folder}/{reid_img_folder_name}')
         # ignore ids whose number of image is less than min_per_person
-        if (len(reid_img_names) < args.min_per_person):
+        if len(reid_img_names) < args.min_per_person:
             continue
-        # downsampling when there are too many images owned by one id
-        if (len(reid_img_names) > args.max_per_person):
+        # down-sampling when there are too many images owned by one id
+        if len(reid_img_names) > args.max_per_person:
             reid_img_names = random.sample(reid_img_names, args.max_per_person)
         # training set
         for reid_img_name in reid_img_names:
-            reid_train_list.append(
+            reid_dataset_list.append(
                 f'{reid_img_folder_name}/{reid_img_name} {train_label}\n')
         train_label += 1
-    reid_entire_dataset_list = reid_train_list.copy()
-    for reid_img_folder_name in reid_img_folder_names[num_train_ids:]:
-        reid_img_names = os.listdir(
-            f'{reid_train_folder}/{reid_img_folder_name}')
-        # ignore ids whose number of image is less than min_per_person
-        if (len(reid_img_names) < args.min_per_person):
-            continue
-        # downsampling when there are too many images owned by one id
-        if (len(reid_img_names) > args.max_per_person):
-            reid_img_names = random.sample(reid_img_names, args.max_per_person)
-        for reid_img_name in reid_img_names:
-            # validation set
-            reid_val_list.append(
-                f'{reid_img_folder_name}/{reid_img_name} {val_label}\n')
-            reid_entire_dataset_list.append(
-                f'{reid_img_folder_name}/{reid_img_name} '
-                f'{train_label + val_label}\n')
-        val_label += 1
-    with open(
-            osp.join(reid_meta_folder,
-                     f'train_{int(100 * (1 - args.val_split))}.txt'),
-            'w') as f:
-        f.writelines(reid_train_list)
-    with open(
-            osp.join(reid_meta_folder, f'val_{int(100 * args.val_split)}.txt'),
-            'w') as f:
-        f.writelines(reid_val_list)
+
     with open(osp.join(reid_meta_folder, 'train.txt'), 'w') as f:
-        f.writelines(reid_entire_dataset_list)
+        f.writelines(reid_dataset_list)
+
 
 
 if __name__ == '__main__':
