@@ -7,7 +7,7 @@ model = dict(
     detector=dict(
         rpn_head=dict(bbox_coder=dict(clip_border=False)),
         roi_head=dict(
-            bbox_head=dict(bbox_coder=dict(clip_border=False), num_classes=1)),
+            bbox_head=dict(bbox_coder=dict(clip_border=False), num_classes=2)),
         init_cfg=dict(
             type='Pretrained',
             checkpoint=  # noqa: E251

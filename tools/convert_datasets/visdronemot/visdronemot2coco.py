@@ -72,7 +72,7 @@ def parse_annotation(annotation):
         instance_id = instance_id,
         iscrowd = False,
     )
-    return score==1, frame_id, output
+    return (score==1 and (category_id in USE)), frame_id, output
 
 
 def main():
