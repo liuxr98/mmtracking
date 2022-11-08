@@ -157,7 +157,7 @@ def main():
                 f'{reid_img_folder_name}/{reid_img_name} {train_label}\n')
         train_label += 1
 
-    with open(osp.join(reid_meta_folder, 'train.txt'), 'w') as f:
+    with open(osp.join(reid_meta_folder, 'labels.txt'), 'w') as f:
         f.writelines(reid_dataset_list)
 
 

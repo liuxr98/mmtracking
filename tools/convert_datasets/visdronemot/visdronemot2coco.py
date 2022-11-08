@@ -70,6 +70,7 @@ def parse_annotation(annotation):
         area = area,
         category_id = category_id,
         instance_id = instance_id,
+        iscrowd = False,
     )
     return score==1, frame_id, output
 
@@ -130,7 +131,7 @@ def main():
 
         vid_id += 1
 
-    mmcv.dump(outputs, osp.join(args.dir, 'train_cocoformat.json'))
+    mmcv.dump(outputs, osp.join(args.dir, 'cocoformat.json'))
 
 
 if __name__ == '__main__':

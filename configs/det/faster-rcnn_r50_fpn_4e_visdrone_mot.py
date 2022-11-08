@@ -1,7 +1,7 @@
 USE_MMDET = True
 _base_ = [
     '../_base_/models/faster_rcnn_r50_fpn.py',
-    '../_base_/data/visdrone_mot_det.py', '../_base_/default_runtime.py'
+    '../_base_/datasets/visdrone_mot_det.py', '../_base_/default_runtime.py'
 ]
 
 model = dict(
