@@ -59,35 +59,32 @@ def parse_args():
         description='Convert VisDrone-MOT label and detections to ReID format.')
     parser.add_argument('-d', '--dir', help='path of VisDrone-MOT data')
     parser.add_argument(
-        '--min-per-person',
+        '--get-images', 
+        action='store_true',
+        help='corp images from frames')
+    parser.add_argument(
+        '--get-labels', 
+        action='store_true',
+        help='generate labels for classification')
+    parser.add_argument(
+        '--min-thr',
         type=int,
         default=8,
         help='minimum number of images for each person')
     parser.add_argument(
-        '--max-per-person',
+        '--max-thr',
         type=int,
         default=1000,
         help='maxmum number of images for each person')
+    parser.add_argument(
+        '--split-ratio',
+        type=float,
+        default=0.9,
+        help='split each class/object images set, 90% for train, 10% for test')
     return parser.parse_args()
 
 
-# def parse_annotation(annotation):
-#     annotation = annotation.strip().split(',')
-#     frame_id, instance_id = map(int, annotation[:2])
-#     bbox = list(map(float, annotation[2:6]))
-#     score = int(annotation[6])
-#     category_id = int(annotation[7])
-#     output = dict(
-#         frame_id = frame_id,
-#         instance_id = instance_id,
-#         bbox = bbox,
-#         score = score,
-#         category_id = category_id,
-#     )
-#     return output
-
-
-def main():
+def get_images(args):
     args = parse_args()
     ann_folder = osp.join(args.dir, 'annotations')
     video_folder = osp.join(args.dir, 'sequences')
@@ -110,17 +107,12 @@ def main():
     for video in tqdm(videos):
         # pdb.set_trace()
         df = pd.read_csv(osp.join(ann_folder, video+'.txt'), names=columns)
-        # with open(osp.join(ann_path, video+'.txt')) as f:
-        #     annotations = f.readlines()
-        # annotations = list(map(parse_annotation, annotations))
-        # annotations.sort(key=lambda x: x.frame_id)
         image_folder = osp.join(video_folder, video)
         images = os.listdir(image_folder)
         images.sort()
         for image in images:
             # read image
-            raw_img = mmcv.imread(
-                f'{image_folder}/{image}')
+            raw_img = mmcv.imread(f'{image_folder}/{image}')
             # found annotations in this image
             frame_id = int(image.split('.')[0])
             _df = df[df.frame_id == frame_id]
@@ -130,36 +122,45 @@ def main():
                 xyxy = np.asarray(
                     [row.bbox_left, row.bbox_top, row.bbox_left + row.bbox_width, row.bbox_top + row.bbox_height])
                 reid_img = mmcv.imcrop(raw_img, xyxy)
-                mmcv.imwrite(reid_img,
-                             f'{reid_folder}/{video}_{row.instance_id:06d}/{row.frame_id:06d}.jpg')
+                mmcv.imwrite(reid_img, f'{reid_folder}/{video}_{row.instance_id:06d}/{row.frame_id:06d}.jpg')
 
-    # generate label infos
-    print("generate reid labels...")
-    reid_meta_folder = osp.join(args.dir, 'reid_meta')
-    if not osp.exists(reid_meta_folder):
-        os.makedirs(reid_meta_folder)
-    reid_img_folder_names = sorted(os.listdir(reid_folder))
-    train_label, val_label = 0, 0
-    random.seed(0)
-    reid_dataset_list = []
-    for reid_img_folder_name in reid_img_folder_names:
-        reid_img_names = os.listdir(
-            f'{reid_folder}/{reid_img_folder_name}')
-        # ignore ids whose number of image is less than min_per_person
-        if len(reid_img_names) < args.min_per_person:
+                
+def get_labels(args):
+    reid_dir = osp.join(args.dir, 'reid')
+    assert osp.exists(reid_dir)
+    reid_meta_dir = osp.join(args.dir, 'reid_meta')
+    if not osp.exists(reid_meta_dir):
+        os.makedirs(reid_meta_dir)
+    img_dirs = os.listdir(reid_dir)
+    train_labels = []
+    test_labels = []
+    label_id = -1
+    for img_dir in tqdm(img_dirs):
+        imgs = os.listdir(osp.join(reid_dir, img_dir))
+        if len(imgs)<args.min_thr:
             continue
-        # down-sampling when there are too many images owned by one id
-        if len(reid_img_names) > args.max_per_person:
-            reid_img_names = random.sample(reid_img_names, args.max_per_person)
-        # training set
-        for reid_img_name in reid_img_names:
-            reid_dataset_list.append(
-                f'{reid_img_folder_name}/{reid_img_name} {train_label}\n')
-        train_label += 1
+        label_id += 1
+        if len(imgs)>args.max_thr:
+            imgs = random.sample(imgs, args.max_thr)
+        for img in imgs[:int(len(imgs)*args.split_ratio)]:
+            train_labels.append(f'{osp.join(img_dir, img)} {label_id}\n')   
+        for img in imgs[int(len(imgs)*args.split_ratio):]:
+            test_labels.append(f'{osp.join(img_dir, img)} {label_id}\n')     
+            
+    with open(osp.join(reid_meta_dir, 'train_labels.txt'), 'w') as f:
+        f.writelines(train_labels)
+    with open(osp.join(reid_meta_dir, 'test_labels.txt'), 'w') as f:
+        f.writelines(test_labels)
+    print(f'num classes: {label_id+1}, lines of train_labels: {len(train_labels)}, lines of test_labels: {len(test_labels)}')
+                
 
-    with open(osp.join(reid_meta_folder, 'labels.txt'), 'w') as f:
-        f.writelines(reid_dataset_list)
-
+def main():
+    args = parse_args()
+    assert not (args.get_images and args.get_labels)
+    if args.get_images:
+        get_images(args)
+    elif args.get_labels:
+        get_labels(args)
 
 
 if __name__ == '__main__':
