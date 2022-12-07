@@ -44,6 +44,8 @@ print(f'Config:\n{cfg.pretty_text}')
 # run and test
 mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
 model = build_model(cfg.model.detector)
+print(model.eval())
+model.train()
 model.init_weights()
 datasets = [build_dataset(cfg.data.train)]
 model.CLASSES = datasets[0].CLASSES

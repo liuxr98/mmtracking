@@ -51,7 +51,7 @@ import pdb
 
 # USELESS = [3, 4, 5, 6, 9, 10, 11]
 # IGNORES = [2, 7, 8, 12, 13]
-USE = [1, 2]
+USE = [1]
 
 
 def parse_args():

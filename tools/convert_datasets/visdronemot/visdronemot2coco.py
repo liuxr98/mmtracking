@@ -49,7 +49,7 @@ from tqdm import tqdm
 
 # USELESS = [3, 4, 5, 6, 9, 10, 11]
 # IGNORES = [2, 7, 8, 12, 13]
-USE = [1, 2]
+USE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -88,6 +88,14 @@ def main():
     outputs['categories'] = [
         dict(id=1, name='pedestrian'),
         dict(id=2, name='people'),
+        dict(id=3, name='bicycle'),
+        dict(id=4, name='car'),
+        dict(id=5, name='van'),
+        dict(id=6, name='truck'),
+        dict(id=7, name='tricycle'),
+        dict(id=8, name='awning-tricycle'),
+        dict(id=9, name='bus'),
+        dict(id=10, name='motor'),
     ]
     query_id = dict()
     for video in tqdm(videos):
